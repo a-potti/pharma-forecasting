@@ -1,0 +1,41 @@
+# Confidential and licensed data -- see the data handling section of CLAUDE.md.
+#
+# Licensed vendor data (IQVIA, Komodo, MarketScan, Symphony/HealthVerity) must never be
+# committed: those licences prohibit redistribution and git history is permanent. Real
+# asset assumptions are confidential. Only synthetic or public example parameters belong
+# in params/ itself.
+params/real/
+
+# Source material, held back from the remote pending a redistribution decision.
+#
+# reference/assumptions_register.xlsx cites Komodo, Merative/MarketScan, IQVIA,
+# Symphony, HealthVerity, Truveta and Datavant as the sources behind its Low/Base/High
+# values, and names assumption owners. That is the category CLAUDE.md says must never be
+# committed. The .jsx, .docx and .pdf carry no vendor names, but travel with it.
+#
+# Everything needed to run and verify the model is committed: the engine, the priors,
+# the Monte Carlo, the tests and the example parameters. Only tests/test_jsx_trace.py
+# needs the .jsx present, and it skips cleanly when it is absent.
+reference/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+
+# Local Claude Code tool permissions -- machine-specific, not project configuration.
+.claude/settings.local.json

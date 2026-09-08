@@ -1,0 +1,133 @@
+# Example parameter set: an IBD biologic, two indications.
+#
+# Synthetic / illustrative values transcribed verbatim from the DEFAULTS object in
+# reference/pharma_forecast_workbench.jsx. This file is what the golden master in
+# CLAUDE.md is defined against -- changing any value here will move those numbers.
+#
+# Percentages are stored as 28, not 0.28 (see CLAUDE.md conventions). Rates are annual.
+# Real asset assumptions belong in params/real/, which is gitignored.
+
+asset: "Asset A — IBD biologic"
+
+# ---- horizon & population (molecule level) ----
+base_year: 2026
+horizon: 12
+population_m: 340
+pop_growth: 0.5          # % per year
+
+# ---- price & channel (molecule level) ----
+wac: 6800                # $ per unit
+price_growth: 1.5        # % per year
+ch_retail: 8             # % of units
+ch_specialty: 70
+ch_buy_bill: 22
+fee_wholesale: 4.5       # % of gross on retail + buy-and-bill
+fee_sp: 2.5              # % of gross on specialty
+
+# ---- gross-to-net (molecule level) ----
+copay_pct: 5.0
+free_goods_pct: 3.0
+returns_pct: 1.2
+
+# ---- valuation (molecule level) ----
+discount_rate: 9
+
+# ---- promotion & halo (molecule level) ----
+promo_intensity: 1.4     # x a single analog launch, split across indications
+sov_theta: 0.4           # time to peak ~ share of voice ^ -theta
+halo_t: 45               # max % compression of time to peak
+halo_a: 80               # max % compression of the access ramp
+halo_seed: 15            # max % starting point on the diffusion curve
+
+# ---- payer mix (molecule level) ----
+segments:
+  - {name: "Commercial",      mix: 52, access: 76, discount: 30}
+  - {name: "Medicare Part D",  mix: 18, access: 70, discount: 34}
+  - {name: "Medicare Part B",  mix: 5,  access: 88, discount: 9}
+  - {name: "Medicaid",         mix: 15, access: 60, discount: 58}
+  - {name: "340B",             mix: 7,  access: 80, discount: 55}
+  - {name: "VA / DoD / FSS",   mix: 3,  access: 85, discount: 42}
+
+# ---- indications (everything above units forks here) ----
+indications:
+  - name: "Ulcerative colitis"
+    mode: pipeline
+    epi_mode: prevalence
+    prevalence: 290          # per 100K
+    incidence: 14
+    start_prevalent: 250
+    mortality: 1.2           # % of pool per year
+    remission: 2.0
+    diagnosed_pct: 85
+    treated_pct: 78
+    eligible_pct: 35
+    launch_year: 2028
+    years_to_peak: 5
+    bass_p: 0.04
+    bass_q: 0.6
+    current_share: 10
+    share_delta: 0.6
+    loe_on: false
+    loe_year: 2036
+    loe_erosion: 55
+    comp_on: true
+    class_capture: 55
+    brand_attr: 78
+    order_penalty: 12
+    competitors:
+      - {name: "Anti-TNF (established)", entry: 2012, attr: 70}
+      - {name: "Anti-integrin",          entry: 2014, attr: 74}
+      - {name: "IL-23",                  entry: 2022, attr: 86}
+      - {name: "JAK inhibitor",          entry: 2024, attr: 68}
+    access_ramp_years: 2.5
+    abrasion: 14
+    persist_mode: curve
+    persist12: 65            # % still on therapy at 12 months
+    persist_months: 8.5
+    compliance: 87
+    units_per_year: 9
+    pos: 85
+    prescriber_overlap: 0    # first to launch, so it gets no halo regardless
+    patient_overlap: 0
+    sov_share: 55
+
+  - name: "Crohn's disease"
+    mode: pipeline
+    epi_mode: prevalence
+    prevalence: 215
+    incidence: 14
+    start_prevalent: 250
+    mortality: 1.2
+    remission: 2.0
+    diagnosed_pct: 85
+    treated_pct: 78
+    eligible_pct: 46
+    launch_year: 2030
+    years_to_peak: 4.5
+    bass_p: 0.04
+    bass_q: 0.6
+    current_share: 10
+    share_delta: 0.6
+    loe_on: false
+    loe_year: 2036
+    loe_erosion: 55
+    comp_on: true
+    class_capture: 62
+    brand_attr: 71
+    order_penalty: 12
+    competitors:
+      - {name: "Anti-TNF (established)", entry: 2012, attr: 70}
+      - {name: "Anti-integrin",          entry: 2014, attr: 74}
+      - {name: "IL-23",                  entry: 2022, attr: 86}
+      - {name: "JAK inhibitor",          entry: 2024, attr: 68}
+    access_ramp_years: 2.5
+    abrasion: 14
+    persist_mode: curve
+    persist12: 57
+    persist_months: 8.5
+    compliance: 87
+    units_per_year: 11
+    pos: 65
+    prescriber_overlap: 90   # launches second, so the halo applies
+    patient_overlap: 4       # IBD-unclassified / diagnostic migration
+    sov_share: 45

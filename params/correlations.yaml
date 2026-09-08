@@ -1,0 +1,49 @@
+# Correlation structure for the Monte Carlo.
+#
+# Independent sampling misstates variance in both directions, so the copula needs a
+# correlation matrix (docs/MODEL_DECISIONS.md, next steps item 3). Anything not named
+# here is left independent -- absence means "no view", not "known to be uncorrelated".
+#
+# Names are the register's "Model parameter" column, as read by priors.py. Indication-
+# level parameters become one variable per indication internally, written `param@name`.
+#
+# Correlations are on the Gaussian copula (rank correlation), not on the marginals.
+# The matrix is repaired to the nearest positive semi-definite matrix if the values
+# below are mutually inconsistent; mc.py reports when that happens.
+
+# Pairs of different parameters.
+#   scope: within_indication -- applied inside each indication separately
+#   scope: molecule          -- applied between two molecule-level parameters
+#   scope: explicit          -- `a` and `b` are full variable names, e.g. "wac"
+#                               or "prevalence@Crohn's disease"
+pairs:
+  - a: prevalence
+    b: diagnosedPct
+    rho: -0.5
+    scope: within_indication
+    why: >
+      Shared denominator. Diagnosis rate is claims-derived diagnosed prevalence over
+      epidemiological prevalence, so an overstated prevalence mechanically understates
+      the diagnosis rate and the two errors partly offset
+      (docs/MODEL_DECISIONS.md section 9).
+
+  - a: classCapture
+    b: brandAttr
+    rho: 0.4
+    scope: within_indication
+    why: >
+      A class that captures more of the eligible pool is one where the branded
+      proposition is strong, and the same target product profile work informs both.
+
+# The same parameter, correlated across indications.
+cross_indication:
+  persist12: 0.3  # same molecule, same tolerability profile, so discontinuation
+                  # experience in one indication carries information about the other
+
+# Probability-of-success outcomes are drawn as Bernoulli per indication. Correlate the
+# underlying draws here if technical or regulatory risk is shared -- a platform-wide
+# safety signal would fail both indications together. Left independent by default.
+pos_outcomes: {}
+#   Example, if you decide the risk is shared:
+#   pos_outcomes:
+#     rho: 0.35
