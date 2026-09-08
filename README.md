@@ -136,6 +136,77 @@ Two things to know when reading the output:
 variables that are inert as configured, and whether competitor entry years were sampled
 at all.
 
+### Sensitivity: Sobol variance decomposition
+
+```python
+from forecast import Molecule, analyze
+
+mol = Molecule.from_yaml("params/example_ibd.yaml")
+s = analyze(mol, n=1024, metric="cum_net")   # ~76,000 model evaluations, ~3 min
+
+s.table()          # S1, ST, interaction, ranked, against the section 3 tornado
+s.additivity()     # sum of first-order indices; 1.0 means a purely additive model
+s.interactions()   # second-order pairs, each with its own error bar
+```
+
+`S1` is the variance a driver explains alone, `ST` the variance it explains including
+every interaction it takes part in. `ST - S1` is the interaction share, which a tornado
+cannot see.
+
+On the example parameters, `sum(S1) = 0.975`: the model is **97.5% additive** over the
+register's ranges, so interactions explain about 4% of output variance and no ranking
+difference is caused by them. That is not a contradiction of the multiplicative
+structure -- for a product of factors each varying by 10-20%, `log Y` is very nearly a
+sum, and interaction terms are second-order small. Interactions would matter if the
+ranges were much wider, or if a clamp were being hit regularly.
+
+| | Sobol ST | Sobol rank | section 3 rank |
+|---|---|---|---|
+| prevalence | 0.211 | 1 | 1 |
+| **orderPenalty** | 0.141 | **2** | **never tested** |
+| eligiblePct | 0.127 | 3 | 2 |
+| brandAttr | 0.091 | 4 | -- |
+| classCapture | 0.084 | 5 | 3 |
+| wac | 0.084 | 6 | -- |
+| diagnosedPct | 0.072 | 7 | 4 |
+| segments.discount | 0.023 | 11 | 14 |
+| **yearsToPeak** | 0.021 | **12** | **5** |
+
+Two differences are worth knowing about, and neither is an interaction effect:
+
+* **`orderPenalty` ranks second and the original tornado never tested it.** It is not in
+  the JSX's driver list at all. It compounds once per competitor already established at
+  launch, so with four prior entrants the register's 6-18% range moves brand
+  attractiveness by a factor of 0.78 down to 0.45 -- a bigger lever than most
+  epidemiology.
+* **`yearsToPeak` falls from 5th to 12th because of the horizon, not the method.** Over
+  12 years both indications sit at plateau for about five of them, so cumulative revenue
+  is dominated by the plateau rather than the ramp. Shorten the horizon and it returns:
+  its swing relative to prevalence goes 0.30x at 12 years, 0.74x at 8, and 1.38x at 6.
+  The halo compresses it further, taking Crohn's entered 3.5-6.5 years down to an
+  effective 2.25-4.19.
+
+Running the section 3 tornado's own method against the *current* multi-indication model
+reproduces the Sobol ranking almost exactly, which is what isolates the cause: the
+ranking moved because the model became multi-indication, not because the method changed.
+
+Two cautions the module enforces rather than leaves to the reader:
+
+* **Sobol assumes independent inputs, so this ignores the copula.** The Saltelli
+  estimator swaps columns between independent matrices; with correlated inputs those
+  hybrid rows fall outside the joint distribution. The register's -0.5 prevalence /
+  diagnosis-rate correlation is exactly the kind that changes apportionment, so read
+  these as "variance apportioned among drivers treated as independent". Shapley effects
+  are the tool for the correlated case.
+* **Second-order indices are not resolvable at this sample size.** Only 1 of 630 pairs
+  exceeds its own confidence interval, because 4% of interaction variance spread over
+  630 pairs leaves each one far below the noise floor. `interactions()` returns the
+  error bars and a `resolvable` flag so the apparent ranking is not mistaken for signal.
+
+`pos` and `discountRate` score exactly zero against cumulative net revenue, which is
+correct -- it is undiscounted and unconditional on success -- and serves as a null
+control on the sampling.
+
 ## The assumptions register
 
 `reference/assumptions_register.xlsx` is **not committed**. It cites Komodo,
@@ -165,6 +236,7 @@ public examples go in `params/`.
 | `src/forecast/engine.py` | the forecast. Pure: parameters in, dataframes out, no I/O |
 | `src/forecast/priors.py` | register rows to PERT distributions; the I/O boundary |
 | `src/forecast/mc.py` | Gaussian copula, discrete drivers, output distributions |
+| `src/forecast/sobol.py` | Sobol variance decomposition, compared to the section 3 tornado |
 | `params/example_ibd.yaml` | example parameters; the golden master is defined against these |
 | `params/correlations.yaml` | correlation structure, meant to be edited |
 | `docs/MODEL_DECISIONS.md` | why the model is built this way |

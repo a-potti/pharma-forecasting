@@ -4,6 +4,7 @@ from .engine import ForecastResult, IndicationDemand, competitive_ceiling, compu
 from .mc import Diagnostics, McResult, run
 from .params import Competitor, Indication, Molecule, Segment
 from .priors import MissingRegisterRows, Prior, Priors, load_priors, pert
+from .sobol import SobolResult, analyze
 
 __all__ = [
     "Competitor",
@@ -17,6 +18,8 @@ __all__ = [
     "Prior",
     "Priors",
     "Segment",
+    "SobolResult",
+    "analyze",
     "competitive_ceiling",
     "compute",
     "load_priors",
