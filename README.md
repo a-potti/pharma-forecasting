@@ -25,7 +25,7 @@ python3 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
-A clone runs the full suite: 126 passed, 1 skipped. The single skip re-verifies the
+A clone runs the full suite: 131 passed, 1 skipped. The single skip re-verifies the
 Python port against the original JSX engine, which is not distributed -- the committed
 fixture still checks the port itself.
 
@@ -221,6 +221,27 @@ Two cautions the module enforces rather than leaves to the reader:
 correct -- it is undiscounted and unconditional on success -- and serves as a null
 control on the sampling.
 
+## The app
+
+An interactive workbench over the same engine:
+
+```bash
+.venv/bin/pip install -e ".[app]"
+streamlit run app/workbench.py
+```
+
+Parameters are on the left, results on the right across seven tabs — forecast,
+by indication, gross-to-net, sensitivity, Monte Carlo, Sobol, year table. The
+deterministic forecast is about a millisecond, so it recomputes on every edit;
+the Monte Carlo and the Sobol decomposition are expensive and sit behind buttons
+with cached results.
+
+A banner reports whether the current parameters still reproduce the golden
+master, so it is obvious when you have wandered off the reference case.
+
+`engine.py` stays pure — the app imports it and draws what it returns. Nothing in
+`app/` is imported by the library.
+
 ## The assumptions register
 
 `params/example_register.xlsx` is a **synthetic** register, committed so the repository is
@@ -265,6 +286,8 @@ public examples go in `params/`.
 | `params/correlations.yaml` | correlation structure, meant to be edited |
 | `params/example_register.xlsx` | synthetic assumptions register, so the repo is self-contained |
 | `tools/make_example_register.py` | authors that register; every value is visible here |
+| `app/workbench.py` | Streamlit UI over the engine; presentation only |
+| `app/charts.py`, `app/theme.py` | chart builders and the validated palette |
 | `docs/MODEL_DECISIONS.md` | why the model is built this way |
 
 `engine.py` does no file reads, no printing, and holds no module-level state, so the
