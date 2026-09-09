@@ -36,9 +36,41 @@ pairs:
       proposition is strong, and the same target product profile work informs both.
 
 # The same parameter, correlated across indications.
+#
+# This section matters more than it looks. Indication-level parameters are sampled once
+# per indication, so leaving them independent lets the two draws partly cancel and
+# systematically understates every epidemiology and funnel driver. Measured on the
+# example parameters: with these rows absent, prevalence ranks 8th by influence on
+# cumulative net revenue; with them present it ranks 1st, which is where the range-based
+# tornado in docs/MODEL_DECISIONS.md section 3 independently puts it.
+#
+# Absence still means "no view", not "known to be uncorrelated" -- but for measurement
+# error shared across indications, no view is the wrong default.
 cross_indication:
-  persist12: 0.3  # same molecule, same tolerability profile, so discontinuation
-                  # experience in one indication carries information about the other
+  # Both indications are the same disease area, counted from one claims database under
+  # one case definition. Section 10 makes the case definition the single line that
+  # explains most disagreement between two forecasts of the same market, so a shared
+  # definition means shared error -- an overstated case definition overstates both.
+  prevalence: 0.8
+
+  # Same construction as prevalence, and the same numerator/denominator pairing, so the
+  # methodological error is common (section 9).
+  diagnosedPct: 0.8
+
+  # One treatment-pattern analysis, one set of claims, one definition of treated.
+  treatedPct: 0.8
+
+  # Lower: "moderate-to-severe, right line of therapy" is a genuinely different clinical
+  # bar in ulcerative colitis than in Crohn's, so only part of the error is shared.
+  eligiblePct: 0.6
+
+  # Same molecule, same tolerability profile, so discontinuation experience in one
+  # indication carries information about the other.
+  persist12: 0.3
+
+  # Deliberately absent: classCapture and brandAttr. Class capture is a property of each
+  # indication's own competitive set, and attractiveness is scored separately against
+  # each set -- the same product frequently performs differently across indications.
 
 # Probability-of-success outcomes are drawn as Bernoulli per indication. Correlate the
 # underlying draws here if technical or regulatory risk is shared -- a platform-wide

@@ -4,22 +4,13 @@ import pytest
 
 from forecast.params import Molecule
 from forecast.priors import (
-    DEFAULT_REGISTER,
+
     LAMBDA_DEFAULT,
     LAMBDA_ELICITED,
     MissingRegisterRows,
     load_priors,
     pert,
     pert_mean,
-)
-
-# priors.py reads the assumptions register at runtime. It is not distributed with the
-# repository (see .gitignore), so the tests that need it skip rather than fail on a
-# clone that does not have it. The pure-distribution tests below do not need it, but
-# keeping one marker for the module is simpler than marking them individually.
-pytestmark = pytest.mark.skipif(
-    not DEFAULT_REGISTER.exists(),
-    reason=f"assumptions register not present at {DEFAULT_REGISTER}",
 )
 
 
@@ -103,8 +94,23 @@ def test_rows_with_blank_estimates_are_skipped_not_guessed(priors):
 
 
 def test_every_row_is_either_a_prior_or_an_explained_skip(priors):
-    """53 register rows, nothing silently dropped."""
-    assert len(priors) + len(priors.skipped) == 53
+    """Nothing is silently dropped: every data row becomes a prior or a stated skip.
+
+    Counted against the workbook itself rather than a hard-coded total, so editing the
+    register cannot quietly invalidate the check.
+    """
+    import openpyxl
+
+    from forecast.priors import HEADER_ROW, SHEET
+
+    ws = openpyxl.load_workbook(priors.register_path, data_only=True)[SHEET]
+    data_rows = sum(
+        1
+        for r in range(HEADER_ROW + 1, ws.max_row + 1)
+        if isinstance(ws.cell(r, 1).value, (int, float))
+    )
+    assert data_rows > 0
+    assert len(priors) + len(priors.skipped) == data_rows
     assert all(s.reason for s in priors.skipped)
 
 
@@ -154,7 +160,7 @@ def test_converted_share_percentages_are_plausible(priors):
 def test_annual_rates_are_converted_too(priors):
     """The rows excluded above are still scaled -- just not checkable by magnitude."""
     assert priors.one("popGrowth").base == pytest.approx(0.5)  # params default
-    assert priors.one("priceGrowth").base == pytest.approx(2.5)  # register base 0.025
+    assert priors.one("priceGrowth").base == pytest.approx(1.5)  # register base 0.015
 
 
 # ---- repeated parameters ------------------------------------------------------------
@@ -163,8 +169,8 @@ def test_annual_rates_are_converted_too(priors):
 def test_repeated_parameters_keep_every_row(priors):
     """One row per payer segment -- collapsing to one key would discard five of six."""
     assert len(priors.by_param["segments.discount"]) == 6
-    assert len(priors.by_param["segments.mix"]) == 5
-    assert len(priors.by_param["segments.access"]) == 4
+    assert len(priors.by_param["segments.mix"]) == 6
+    assert len(priors.by_param["segments.access"]) == 6
     assert len(priors.by_param["competitors.entry"]) == 2
 
 

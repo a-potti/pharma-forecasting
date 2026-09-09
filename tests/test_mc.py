@@ -7,15 +7,7 @@ from scipy import stats
 from forecast import mc
 from forecast.engine import compute
 from forecast.params import Molecule
-from forecast.priors import DEFAULT_REGISTER, load_priors
-
-# mc.py draws its marginals from the assumptions register. It is not distributed with
-# the repository (see .gitignore), so these tests skip rather than fail on a clone that
-# does not have it.
-pytestmark = pytest.mark.skipif(
-    not DEFAULT_REGISTER.exists(),
-    reason=f"assumptions register not present at {DEFAULT_REGISTER}",
-)
+from forecast.priors import load_priors
 
 PARAMS = "params/example_ibd.yaml"
 
@@ -111,6 +103,72 @@ def test_correlation_is_applied_within_each_indication_separately(mol, variables
     assert len(within) == 2 * len(mol.indications)  # two pairs, per indication
 
 
+def test_cross_indication_correlation_implies_the_diagonal_pair(mol, variables):
+    """A within-indication pair plus a cross-indication one implies the diagonal term.
+
+    prevalence and diagnosedPct correlate -0.5 inside an indication and each correlates
+    0.8 across indications, so prevalence in one against diagnosis rate in the other
+    cannot be zero. Leaving it at zero describes no joint distribution.
+    """
+    import yaml
+
+    spec = yaml.safe_load(open("params/correlations.yaml"))
+    R, applied, moved = mc.build_correlation(variables, mol, spec)
+    implied = [a for a in applied if a.startswith("implied")]
+    assert len(implied) == 2, implied
+    assert all("-0.40" in a for a in implied)  # -0.5 * sqrt(0.8 * 0.8)
+
+
+def test_the_seeded_correlations_need_no_repair(mol, variables):
+    """The implied terms are what make the seeded specification self-consistent."""
+    import yaml
+
+    spec = yaml.safe_load(open("params/correlations.yaml"))
+    R, _, moved = mc.build_correlation(variables, mol, spec)
+    assert moved == 0.0
+    assert np.linalg.eigvalsh(R).min() > 0.05
+
+
+def test_without_the_implied_term_the_matrix_would_not_be_a_correlation_matrix(mol, variables):
+    """Guards the fix: drop the cross-indication rows and the diagonal term vanishes."""
+    spec = {
+        "pairs": [
+            {"a": "prevalence", "b": "diagnosedPct", "rho": -0.5,
+             "scope": "within_indication"}
+        ],
+        "cross_indication": {"prevalence": 0.8, "diagnosedPct": 0.8},
+    }
+    R, applied, moved = mc.build_correlation(variables, mol, spec)
+    assert any(a.startswith("implied") for a in applied)
+    assert moved == 0.0
+
+    index = {v.name: i for i, v in enumerate(variables)}
+    names = [
+        "prevalence@Ulcerative colitis", "prevalence@Crohn's disease",
+        "diagnosedPct@Ulcerative colitis", "diagnosedPct@Crohn's disease",
+    ]
+    idx = [index[n] for n in names]
+    block = R[np.ix_(idx, idx)]
+    assert np.linalg.eigvalsh(block).min() > 0
+
+    without = block.copy()
+    without[0, 3] = without[3, 0] = without[1, 2] = without[2, 1] = 0.0
+    assert np.linalg.eigvalsh(without).min() < 0, (
+        "the implied term should be what keeps this block positive semi-definite"
+    )
+
+
+def test_cross_indication_epidemiology_is_seeded(mol, variables):
+    """Shared case definition means shared measurement error (MODEL_DECISIONS 9, 10)."""
+    import yaml
+
+    spec = yaml.safe_load(open("params/correlations.yaml"))
+    _, applied, _ = mc.build_correlation(variables, mol, spec)
+    cross = " ".join(a for a in applied if a.startswith("cross-indication"))
+    for param in ("prevalence", "diagnosedPct", "treatedPct", "eligiblePct", "persist12"):
+        assert param in cross, param
+
+
 def test_marginals_survive_the_copula(sampled, priors):
     """A copula must not move the marginals -- draws stay inside the register range."""
     for name, draws in sampled.items():
@@ -138,14 +196,6 @@ def test_inconsistent_correlations_are_repaired_not_accepted(mol, variables):
     assert moved > 0, "an impossible matrix should register a repair"
     assert np.linalg.eigvalsh(R).min() > -1e-8, "repaired matrix must be PSD"
     assert np.allclose(np.diag(R), 1.0)
-
-
-def test_a_consistent_matrix_is_left_alone(mol, variables):
-    import yaml
-
-    spec = yaml.safe_load(open("params/correlations.yaml"))
-    _, _, moved = mc.build_correlation(variables, mol, spec)
-    assert moved == 0.0
 
 
 # ---- discrete drivers ---------------------------------------------------------------

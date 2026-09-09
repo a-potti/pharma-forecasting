@@ -5,12 +5,7 @@ import pytest
 
 from forecast import sobol
 from forecast.params import Molecule
-from forecast.priors import DEFAULT_REGISTER, load_priors
-
-pytestmark = pytest.mark.skipif(
-    not DEFAULT_REGISTER.exists(),
-    reason=f"assumptions register not present at {DEFAULT_REGISTER}",
-)
+from forecast.priors import load_priors
 
 PARAMS = "params/example_ibd.yaml"
 

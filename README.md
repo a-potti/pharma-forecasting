@@ -25,8 +25,9 @@ python3 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
-A clone runs 34 tests and skips 70. That is expected -- see
-[The assumptions register](#the-assumptions-register).
+A clone runs the full suite: 126 passed, 1 skipped. The single skip re-verifies the
+Python port against the original JSX engine, which is not distributed -- the committed
+fixture still checks the port itself.
 
 ## Use
 
@@ -105,15 +106,28 @@ mc.diagnostics                # what was sampled, and what could not be
 ```
 
 ```
-peak_net  P10 $473M    P50 $602M    P90 $751M
-cum_net   P10 $3,103M  P50 $3,913M  P90 $4,889M
-rnpv      P10 $706M    P50 $1,504M  P90 $2,302M
+peak_net  P10 $471M    P50 $618M    P90 $807M
+cum_net   P10 $3,088M  P50 $4,001M  P90 $5,192M
+rnpv      P10 $725M    P50 $1,534M  P90 $2,408M
 ```
 
 Drivers are drawn through a Gaussian copula, not independently -- independent sampling
 misstates variance in both directions. Correlations live in `params/correlations.yaml`
 and are meant to be edited. An inconsistent matrix is repaired to the nearest positive
 semi-definite one, and the repair is reported rather than silently applied.
+
+Indication-level parameters are drawn once per indication, so `cross_indication` matters
+more than it looks. Left independent, the two draws partly cancel and every epidemiology
+and funnel driver is understated -- prevalence ranks 8th by influence on cumulative net
+revenue. With the shared measurement error seeded (the two indications are one disease
+area counted from one claims database under one case definition), it ranks 2nd.
+
+Specifying that correctly needs one more step. If prevalence and diagnosis rate correlate
+-0.5 within an indication, and each correlates 0.8 across indications, then prevalence in
+one against diagnosis rate in the other cannot be zero -- setting it so describes no joint
+distribution at all, and puts the smallest eigenvalue at -0.30. `mc.py` derives the
+implied term as the product, restoring the smallest eigenvalue to +0.10, and lists it as
+`implied` in `diagnostics.correlations_applied`.
 
 Register rows supply *relative* uncertainty: a draw becomes `shock = draw / register_base`
 applied to whatever the parameter file holds. The register describes a related but
@@ -129,7 +143,7 @@ Two things to know when reading the output:
 * **rNPV cannot go below zero in this model.** Net sales are floored at zero and there
   are no costs -- no COGS, no R&D, no SG&A, no milestones -- so `p_rnpv_below_zero` is
   structurally 0.0, not an estimate. Use `p_below(threshold)` against a real hurdle.
-* **The base case is not a P50.** It sits around P66 on revenue, because most of the
+* **The base case is not a P50.** It sits around P59 on revenue, because most of the
   register's ranges are skewed against it.
 
 `mc.diagnostics` names what the run could not do: parameters with no register row,
@@ -153,7 +167,7 @@ s.interactions()   # second-order pairs, each with its own error bar
 every interaction it takes part in. `ST - S1` is the interaction share, which a tornado
 cannot see.
 
-On the example parameters, `sum(S1) = 0.975`: the model is **97.5% additive** over the
+On the example parameters, `sum(S1) = 0.972`: the model is **97% additive** over the
 register's ranges, so interactions explain about 4% of output variance and no ranking
 difference is caused by them. That is not a contradiction of the multiplicative
 structure -- for a product of factors each varying by 10-20%, `log Y` is very nearly a
@@ -162,15 +176,15 @@ ranges were much wider, or if a clamp were being hit regularly.
 
 | | Sobol ST | Sobol rank | section 3 rank |
 |---|---|---|---|
-| prevalence | 0.211 | 1 | 1 |
-| **orderPenalty** | 0.141 | **2** | **never tested** |
-| eligiblePct | 0.127 | 3 | 2 |
-| brandAttr | 0.091 | 4 | -- |
-| classCapture | 0.084 | 5 | 3 |
-| wac | 0.084 | 6 | -- |
-| diagnosedPct | 0.072 | 7 | 4 |
-| segments.discount | 0.023 | 11 | 14 |
-| **yearsToPeak** | 0.021 | **12** | **5** |
+| prevalence | 0.201 | 1 | 1 |
+| **orderPenalty** | 0.133 | **2** | **never tested** |
+| eligiblePct | 0.121 | 3 | 2 |
+| brandAttr | 0.086 | 4 | -- |
+| wac | 0.080 | 5 | -- |
+| classCapture | 0.080 | 6 | 3 |
+| diagnosedPct | 0.069 | 8 | 4 |
+| segments.discount | 0.022 | 12 | 14 |
+| **yearsToPeak** | 0.020 | **13** | **5** |
 
 Two differences are worth knowing about, and neither is an interaction effect:
 
@@ -198,7 +212,7 @@ Two cautions the module enforces rather than leaves to the reader:
   diagnosis-rate correlation is exactly the kind that changes apportionment, so read
   these as "variance apportioned among drivers treated as independent". Shapley effects
   are the tool for the correlated case.
-* **Second-order indices are not resolvable at this sample size.** Only 1 of 630 pairs
+* **Second-order indices are not resolvable at this sample size.** No pair of the 630
   exceeds its own confidence interval, because 4% of interaction variance spread over
   630 pairs leaves each one far below the noise floor. `interactions()` returns the
   error bars and a `resolvable` flag so the apparent ranking is not mistaken for signal.
@@ -209,23 +223,33 @@ control on the sampling.
 
 ## The assumptions register
 
-`reference/assumptions_register.xlsx` is **not committed**. It cites Komodo,
-Merative/MarketScan, IQVIA, Symphony, HealthVerity, Truveta and Datavant as the sources
-behind its values. Those licences prohibit redistribution and git history is permanent,
-so the file stays local (see the data handling section of `CLAUDE.md`).
+`params/example_register.xlsx` is a **synthetic** register, committed so the repository is
+self-contained. Every value in it was authored for this repository; it is not a redacted
+real register and describes no real programme. Regenerate it with
+`python tools/make_example_register.py`, which is where those values live and can be
+edited.
 
-`priors.py` and `mc.py` read it at runtime, so without it:
+Two properties are deliberate:
 
-| | tests |
-|---|---|
-| clone, no register | 34 passed, 70 skipped |
-| with `reference/` present | 104 passed |
+* The six drivers tabulated in `docs/MODEL_DECISIONS.md` section 3 carry exactly the
+  ranges that document publishes, so the Sobol-versus-tornado comparison above stays
+  like for like.
+* Molecule-level base values match `params/example_ibd.yaml`, so the register and the
+  example parameters describe one asset.
 
-The engine and its golden master are fully covered either way. To restore the rest, put
-the register at `reference/assumptions_register.xlsx`, or point `priors.load_priors()` at
-your own copy.
+It also preserves the awkward cases a loader has to survive: a `Derived` row with no
+estimates, an `Elicited` row nobody filled in, a row for a mechanism that is documented
+but not implemented, and the same fifteen-parameter coverage gap.
 
-Confidential parameters belong in `params/real/`, which is gitignored. Only synthetic or
+**A real register is not distributed.** Registers cite the data vendors behind their
+values; those licences prohibit redistribution and git history is permanent, so
+`reference/` is gitignored (see the data handling section of `CLAUDE.md`). To use one:
+
+```python
+load_priors(path="reference/assumptions_register.xlsx")
+```
+
+Confidential parameters belong in `params/real/`, also gitignored. Only synthetic or
 public examples go in `params/`.
 
 ## Layout
@@ -239,6 +263,8 @@ public examples go in `params/`.
 | `src/forecast/sobol.py` | Sobol variance decomposition, compared to the section 3 tornado |
 | `params/example_ibd.yaml` | example parameters; the golden master is defined against these |
 | `params/correlations.yaml` | correlation structure, meant to be edited |
+| `params/example_register.xlsx` | synthetic assumptions register, so the repo is self-contained |
+| `tools/make_example_register.py` | authors that register; every value is visible here |
 | `docs/MODEL_DECISIONS.md` | why the model is built this way |
 
 `engine.py` does no file reads, no printing, and holds no module-level state, so the

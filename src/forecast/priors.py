@@ -1,9 +1,14 @@
 """Register-derived prior distributions.
 
-Reads reference/assumptions_register.xlsx and turns each assumption's Low/Base/High into
-a modified PERT distribution, keyed by the register's "Model parameter" column. The
-register is the source of truth for parameter values (CLAUDE.md), so this module is the
-only place a number crosses from the register into the model.
+Reads an assumptions register and turns each assumption's Low/Base/High into a modified
+PERT distribution, keyed by the register's "Model parameter" column. The register is the
+source of truth for parameter values (CLAUDE.md), so this module is the only place a
+number crosses from the register into the model.
+
+The default is params/example_register.xlsx, a synthetic register committed so the
+repository is self-contained -- see its Read me tab. Point ``load_priors(path=...)`` at a
+real register to use one; real registers are gitignored because vendor licences prohibit
+redistribution and git history is permanent.
 
 Unlike engine.py this module does I/O -- it is the boundary layer that reads the register
 so that engine.py never has to.
@@ -36,6 +41,7 @@ That rule is not a guess. Six rows survive the conversion as exact matches again
 params/example_ibd.yaml -- orderPenalty 0.12 -> 12, freeGoodsPct 0.03 -> 3.0,
 returnsPct 0.012 -> 1.2, feeWholesale 0.045 -> 4.5, feeSP 0.025 -> 2.5,
 discountRate 0.09 -> 9 -- which would be a remarkable coincidence if the rule were wrong.
+The same six hold against the real register that this convention was first found in.
 ``Prior.scaled_by`` records the factor applied to each row so the conversion is auditable
 rather than invisible.
 
@@ -69,7 +75,14 @@ __all__ = [
     "pert",
 ]
 
+# The synthetic example register, committed so the repository is self-contained. A real
+# register goes at reference/assumptions_register.xlsx and is loaded with
+# load_priors(path=...); it is gitignored because vendor licences prohibit
+# redistribution and git history is permanent.
 DEFAULT_REGISTER = (
+    Path(__file__).resolve().parents[2] / "params" / "example_register.xlsx"
+)
+REAL_REGISTER = (
     Path(__file__).resolve().parents[2] / "reference" / "assumptions_register.xlsx"
 )
 

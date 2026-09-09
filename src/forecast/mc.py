@@ -20,10 +20,12 @@ reproduces that same error in a different form.
 
 Relative shocks, not absolute values
 ------------------------------------
-The register describes a related but different asset: wac base 9800 against 6800 in
-params/example_ibd.yaml, prevalence 145 against 290 and 215. Sampling its absolute
-numbers would forecast the register's asset rather than this one, and the median run
-would not resemble the deterministic base case.
+A register row and the parameter it feeds need not share a level. The register schema
+has no indication column, so one ``prevalence`` row of 110/145/195 stands behind two
+indications carrying 290 and 215; and a register written for a related asset can sit at
+a different price point entirely. Sampling absolute numbers would overwrite the
+parameter file with the register's asset, and the median run would not resemble the
+deterministic base case.
 
 So each register row supplies *relative* uncertainty. A draw becomes a shock,
 ``shock = draw / register_base``, applied to whatever that field holds in the parameter
@@ -40,12 +42,18 @@ to be bridged:
 * Indication-level rows become one variable per indication, so UC and Crohn's get
   separate draws. Correlate them through ``cross_indication`` in the YAML; they are
   independent unless named there.
-* Payer-segment rows are pooled to one shock per parameter applied to every segment,
-  because the register's segmentation (5 mix rows, 4 access, 6 discount) is a different
-  cut from the model's six segments and mapping row i to segment i would misalign them.
-  A pooled shock on ``segments.mix`` is a no-op by construction -- the engine normalises
-  mix by its own sum -- so payer mix carries no uncertainty here. ``Diagnostics`` says so
-  rather than leaving it implicit.
+* Payer-segment rows are pooled to one shock per parameter applied to every segment.
+  A register's payer cut need not match the model's: the real register this was written
+  against has 5 mix rows, 4 access and 6 discount against the model's six segments, and
+  mapping row i to segment i would attach one segment's number to another. Pooling is
+  robust to that. params/example_register.xlsx does align six-to-six, so per-segment
+  sampling would be possible there -- it is not done, because the pooled shock is what
+  reproduces the documented gross-to-net and coverage ranges.
+
+  One consequence to keep in view: a pooled shock on ``segments.mix`` is a no-op by
+  construction, because the engine normalises mix by its own sum. Payer mix therefore
+  carries no uncertainty either way, and ``Diagnostics.inert_variables`` says so rather
+  than leaving it implicit.
 * Competitor entry years are sampled only for competitors entering at or after the base
   year. In the example parameters every competitor entered between 2012 and 2024, so
   nothing is sampled and ``Diagnostics.entry_year_variables`` is zero.
@@ -272,17 +280,39 @@ def build_correlation(
         R[i, j] = R[j, i] = rho
         applied.append(f"{label}: {a} <-> {b} = {rho:+.2f}")
 
+    cross = {k: float(v) for k, v in (spec.get("cross_indication") or {}).items()}
+
     for pair in spec.get("pairs") or []:
         a, b, rho = pair["a"], pair["b"], float(pair["rho"])
         scope = pair.get("scope", "explicit")
-        if scope == "within_indication":
-            for ind in mol.indications:
-                put(f"{a}@{ind.name}", f"{b}@{ind.name}", rho, "within-indication")
-        else:
+        if scope != "within_indication":
             put(a, b, rho, scope)
+            continue
 
-    for param, rho in (spec.get("cross_indication") or {}).items():
-        rho = float(rho)
+        for ind in mol.indications:
+            put(f"{a}@{ind.name}", f"{b}@{ind.name}", rho, "within-indication")
+
+        # Specifying a within-indication pair and a cross-indication correlation for the
+        # same parameters implies a value for the diagonal pair -- prevalence in one
+        # indication against diagnosis rate in the other -- and leaving that at zero
+        # describes no joint distribution at all. On the seeded values it puts the
+        # smallest eigenvalue at -0.30, so the matrix would only survive by being
+        # repaired, which silently weakens the correlations that were asked for.
+        #
+        # Under a one-factor reading -- each variable is a shared component plus an
+        # idiosyncratic one, and the within-indication correlation applies to both --
+        # the implied term is the product. It is exact when both parameters share the
+        # same cross-indication strength and conservative otherwise, and it restores the
+        # smallest eigenvalue to +0.10 on the seeded values.
+        implied = rho * math.sqrt(cross.get(a, 0.0) * cross.get(b, 0.0))
+        if implied:
+            for i, ind_i in enumerate(mol.indications):
+                for j, ind_j in enumerate(mol.indications):
+                    if i < j:
+                        put(f"{a}@{ind_i.name}", f"{b}@{ind_j.name}", implied, "implied")
+                        put(f"{a}@{ind_j.name}", f"{b}@{ind_i.name}", implied, "implied")
+
+    for param, rho in cross.items():
         names = [f"{param}@{ind.name}" for ind in mol.indications]
         for i in range(len(names)):
             for j in range(i + 1, len(names)):
