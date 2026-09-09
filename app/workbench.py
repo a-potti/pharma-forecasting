@@ -72,6 +72,16 @@ def num(label, container, path, *, step, fmt="%.2f", minv=None, maxv=None, help=
         min_value=minv, max_value=maxv, key=key, help=help)
 
 
+def check(label, container, path, *, help=None):
+    """A checkbox bound to a path into the parameter dict."""
+    node = P
+    for k in path[:-1]:
+        node = node[k]
+    key = "w_" + "_".join(str(x) for x in path)
+    node[path[-1]] = container.checkbox(
+        label, value=bool(node[path[-1]]), key=key, help=help)
+
+
 # ---------------------------------------------------------------- sidebar
 
 sb = st.sidebar
@@ -83,6 +93,21 @@ pal = palette(dark)
 names = [i["name"] for i in P["indications"]]
 sel = sb.selectbox("Indication", range(len(names)), format_func=lambda i: names[i])
 ind = P["indications"][sel]
+
+with sb.expander("Timing & exclusivity", expanded=True):
+    c = st.container()
+    num("Launch year", c, ("indications", sel, "launch_year"), step=1.0, fmt="%.0f",
+        help="The launch year itself gets a full year of diffusion")
+    check("Loss of exclusivity", c, ("indications", sel, "loe_on"),
+          help="Erosion compounds from the LOE year itself")
+    if ind["loe_on"]:
+        num("LOE year", c, ("indications", sel, "loe_year"), step=1.0, fmt="%.0f")
+        num("Erosion per year %", c, ("indications", sel, "loe_erosion"), step=5.0,
+            fmt="%.0f", minv=0.0, maxv=100.0,
+            help="Share of remaining brand share lost each year, compounding")
+    else:
+        st.caption("Off — no erosion is applied. Switch on to model a "
+                   "post-exclusivity decline for this indication.")
 
 with sb.expander("Epidemiology funnel", expanded=True):
     c = st.container()
@@ -98,7 +123,6 @@ with sb.expander("Epidemiology funnel", expanded=True):
 
 with sb.expander("Uptake & persistence"):
     c = st.container()
-    num("Launch year", c, ("indications", sel, "launch_year"), step=1.0, fmt="%.0f")
     num("Years to peak", c, ("indications", sel, "years_to_peak"), step=0.5,
         fmt="%.1f", minv=0.0, help="Before halo and share-of-voice adjustment")
     num("Bass p", c, ("indications", sel, "bass_p"), step=0.01, fmt="%.3f",
@@ -341,6 +365,10 @@ with tabs[4]:
                              key="w_draws")
     if c1.button("Run Monte Carlo", type="primary", width='stretch'):
         st.session_state["mc_key"] = (mol.model_dump_json(), draws)
+    elif "mc_key" not in st.session_state:
+        # Land on a distribution rather than an empty tab. 500 draws is about half
+        # a second; the button re-runs at whatever the slider says.
+        st.session_state["mc_key"] = (mol.model_dump_json(), 500)
 
     @st.cache_data(show_spinner="Sampling…")
     def run_mc(params_json: str, n: int):
@@ -356,6 +384,11 @@ with tabs[4]:
     if st.session_state.get("mc_key"):
         pj, n = st.session_state["mc_key"]
         pk_net, cum, rnpv, sm, nvar, corrs, repair, inert, unsampled = run_mc(pj, n)
+        if pj != mol.model_dump_json():
+            st.warning("Parameters have changed since this run. Press Run Monte "
+                       "Carlo to resample.")
+        st.caption(f"{n:,} draws" + ("" if n >= 2000 else
+                   " — raise the slider for a smoother tail"))
         m1, m2, m3 = st.columns(3)
         for col, (arr, base, lab) in zip(
             (m1, m2, m3),
@@ -387,9 +420,7 @@ with tabs[4]:
             st.code("\n".join(inert) or "none")
             st.markdown("**No register row — held at their value, zero variance**")
             st.code("\n".join(sorted(unsampled)) or "none")
-    else:
-        st.info("Press Run Monte Carlo. 2,000 draws takes a couple of seconds; "
-                "10,000 takes about ten.")
+
 
 # ---------------------------------------------------------------- sobol
 with tabs[5]:
